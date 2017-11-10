@@ -19,10 +19,12 @@ PINOLEDSDA = 4  # Pin for display SDA
 
 class Display():
     """SSD1306 based OLED display, 128x64).
+
     Ok with 6 lines of text
     """
 
     def __init__(self, inittext="Weather Central"):
+        """Init the display."""
         self.inittext = inittext
         self.i2c = I2C(scl=Pin(PINOLEDSCL), sda=Pin(PINOLEDSDA), freq=100000)
         self.lcd = ssd1306.SSD1306_I2C(128, 64, self.i2c)
@@ -40,13 +42,20 @@ class Display():
         self.lcd.show()
 
     def clear(self, show=False):
+        """Clear the display.
+
+        @show: Set to directly update
+        """
         self.lcd.fill(0)
         if show:
             self.lcd.show()
 
 
 class Network():
+    """Network and network data handling class."""
+
     def __init__(self):
+        """Init the network."""
         self.sta_if = network.WLAN(network.STA_IF)
         self.sta_if.active(True)
         self.sta_if.connect(secrets.SSID, secrets.WIFIPWD)
@@ -56,23 +65,30 @@ class Network():
                 break
             print("Waiting for connection " + str(i))
             utime.sleep(1)
+        # TODO: Opportunistic re-tra to connect
 
     def settime(self):
+        """Set the time using NTP."""
         try:
             ntptime.settime()
         except OSError:
             pass  # timeout possible
 
     def gettime(self):
+        """Get the time."""
         (y, m, d, h, m, s, foo, bar) = utime.localtime()
         return (y, m, d, h+timeoffset, m, s, foo, bar)
 
     def isconnected(self):
+        """Check if the network is connected."""
         return self.sta_if.isconnected()
 
 
 class WeatherStation():
+    """Main weather station class."""
+
     def __init__(self):
+        """Init the weather station."""
         self.display = Display()
         self.net = Network()
         self.dht = dht.DHT22(machine.Pin(PINDHT))
@@ -98,22 +114,13 @@ class WeatherStation():
         self.display.showText("{0}:{1}".format(tme[3], tme[4]), 2)
         # Temp/Hum
         self.display.showText("Innen: {0}:{1}".format(self.dht.temperature(),
-                                                        self.dht.humidity()), 3)
+                                                      self.dht.humidity()), 3)
 
-
-
-
-# TODO: Set up wifi
-
-
-
-
-# TODO: get time
 
 # TODO: Get weather forecast
 
 # TODO: Get if door is opened
 
-# TODO: Display time
+# TODO: MQTT communication
 
 ws = WeatherStation()
