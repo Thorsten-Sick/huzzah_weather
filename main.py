@@ -7,6 +7,8 @@ import secrets
 import utime
 import urequests
 import dht
+import neopixel
+import esp
 
 # Configs
 timeoffset = 1   # Offset in hours to London
@@ -16,6 +18,14 @@ CITYID = "2849802"  # Openweathermap city ID
 PINDHT = 2  # Pin for DHT 22 data
 PINOLEDSCL = 5  # Pin for display SCL
 PINOLEDSDA = 4  # Pin for display SDA
+PINNEOPIXEL = 14  # Pin for neo pixel
+PINDOOR = 12      # Pin for door sensor
+
+# Colors for Neo pixel
+RED = (100, 0, 0)       # Forecast: Will be raining and door is open
+GREEN = (0, 100, 0)     # Forecast: No rain and warm. Good for biking
+BLUE = (0, 0, 100)      #
+BLACK = (0, 0, 0)       # switch it off
 
 
 class Display():
@@ -90,27 +100,28 @@ class Network():
     def getForecast(self):
         """Get forecast from OpenWeatherMap online service."""
 
-        count = 3  #  Number of items, reduce because: memory
+        count = 3   # Number of items, reduce because: memory
         url = "http://api.openweathermap.org/data/2.5/forecast?id={0}&cnt={1}&units=metric&APPID={2}".format(CITYID, count, secrets.OPENWEATHERMAPKEY)
         r = urequests.get(url)
         if r.status_code == 200:
             self.weatherdata = r.json()
-            print(self.weatherdata)
         else:
             print("Error getting weather map")
 
     def getRain(self):
         """Read weather data to check if it will rain."""
         res = []
-        for i in self.weatherdata["list"]:
-            res.append(i["rain"]["3h"])
+        if self.weatherdata:
+            for i in self.weatherdata["list"]:
+                res.append(i["rain"]["3h"])
         return res
 
     def getTemp(self):
         """Read weather data to check temp."""
         res = []
-        for i in self.weatherdata["list"]:
-            res.append(i["main"]["temp"])
+        if self.weatherdata:
+            for i in self.weatherdata["list"]:
+                res.append(i["main"]["temp"])
         return res
 
 
@@ -120,13 +131,23 @@ class WeatherStation():
 
     def __init__(self):
         """Init the weather station."""
+
+        # We do not want to sleep, wall socket powered...
+        esp.sleep_type(esp.SLEEP_NONE)
+        # SLEEP_MODEM is also an option, but prevent it from re-loading data...
+
         self.display = Display()
         self.net = Network()
         self.dht = dht.DHT22(machine.Pin(PINDHT))
 
+        # Neopixel
+        self.np = neopixel.NeoPixel(Pin(PINNEOPIXEL), 1)
+
+        self.door = machine.Pin(PINDOOR, machine.Pin.IN, machine.Pin.PULL_UP)
+
         self.net.getForecast()
-        print(self.net.getRain())
-        print(self.net.getTemp())
+        #print(self.net.getRain())
+        #print(self.net.getTemp())
 
         # Initial display
         self.updateDisplay()
@@ -136,6 +157,20 @@ class WeatherStation():
         self.tim.init(period=60000, mode=machine.Timer.PERIODIC,
                       callback=lambda t: self.updateDisplay())
 
+        # Forecast update
+        self.tim = machine.Timer(2)
+        self.tim.init(period=60000*3, mode=machine.Timer.PERIODIC,
+                      callback=lambda t: self.net.getForecast())
+
+    def doorOpen(self):
+        return self.door.value()
+
+    def setNP(self, color):
+        """Set neo pixel."""
+
+        self.np[0] = color
+        self.np.write()
+
     def measure(self):
         """Collect different measurements."""
         self.dht.measure()
@@ -144,21 +179,48 @@ class WeatherStation():
         """Update the display."""
         self.measure()
         self.display.clear()
+        comment = self.logic()
         # Time
         tme = self.net.gettime()
-        self.display.showText("{0}:{1}".format(tme[3], tme[4]), 1)
+        self.display.showText("{0}:{1}".format(tme[3], tme[4]), 0)
         # Temp/Hum
         self.display.showText("Innen: {0}:{1}".format(self.dht.temperature(),
-                                                      self.dht.humidity()), 2)
+                                                      self.dht.humidity()), 1)
         # Forecast
         temp = self.net.getTemp()
-        self.display.showText("Temp: {0}-{1}".format(min(temp), max(temp)), 3)
+        self.display.showText("Temp: {0}-{1}".format(min(temp), max(temp)), 2)
 
         # Rain
         rain = self.net.getRain()
-        self.display.showText("Rain(max): {0}".format(max(rain)), 4)
+        self.display.showText("Rain(max): {0}".format(max(rain)), 3)
 
-# TODO: Get weather forecast
+        # Comment
+        self.display.showText(comment, 4)
+
+    def logic(self):
+        """Use logic to help the user."""
+        rain = max(self.net.getRain())
+        temp = max(self.net.getTemp())
+
+        hum = self.dht.humidity()
+
+        rt = 0.001   # rain threshold
+        res = ""
+
+        if rain < rt and temp > 10:
+            # Good for biking
+            self.setNP(GREEN)
+            res = "biking"
+        elif rain > rt and self.doorOpen():
+            self.setNP(RED)
+            res = "HODOR"
+        elif hum < 40 or hum > 60:
+            self.setNP(BLUE)
+            res = "Humidity !"
+        else:
+            self.setNP(BLACK)
+            res = ""
+        return res
 
 # TODO: Get if door is opened
 
