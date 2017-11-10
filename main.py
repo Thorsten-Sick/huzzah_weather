@@ -75,25 +75,31 @@ class WeatherStation():
     def __init__(self):
         self.display = Display()
         self.net = Network()
-        self.updateDisplay()
         self.dht = dht.DHT22(machine.Pin(PINDHT))
 
-        # Timer to update display
+        # Initial display
+        self.updateDisplay()
+
+        # Timer to periodically update display
         self.tim = machine.Timer(1)
-        self.tim.init(period=1000, mode=machine.Timer.PERIODIC,
+        self.tim.init(period=60000, mode=machine.Timer.PERIODIC,
                       callback=lambda t: self.updateDisplay())
 
     def measure(self):
+        """Collect different measurements."""
         self.dht.measure()
 
     def updateDisplay(self):
+        """Update the display."""
+        self.measure()
         self.display.clear()
         # Time
         tme = self.net.gettime()
-        self.display.showText("{0}:{1} {2}".format(tme[3], tme[4], tme[5]), 2)
+        self.display.showText("{0}:{1}".format(tme[3], tme[4]), 2)
         # Temp/Hum
-        self.display.showText("Innen: {0}°:{1}%".format(self.dht.temperature(),
+        self.display.showText("Innen: {0}:{1}".format(self.dht.temperature(),
                                                         self.dht.humidity()), 3)
+
 
 
 
