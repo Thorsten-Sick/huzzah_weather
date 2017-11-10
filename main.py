@@ -10,6 +10,7 @@ import dht
 
 # Configs
 timeoffset = 1   # Offset in hours to London
+CITYID = "2849802"  # Openweathermap city ID
 
 # Hardware config
 PINDHT = 2  # Pin for DHT 22 data
@@ -56,6 +57,9 @@ class Network():
 
     def __init__(self):
         """Init the network."""
+
+        self.weatherdata = None
+
         self.sta_if = network.WLAN(network.STA_IF)
         self.sta_if.active(True)
         self.sta_if.connect(secrets.SSID, secrets.WIFIPWD)
@@ -83,6 +87,33 @@ class Network():
         """Check if the network is connected."""
         return self.sta_if.isconnected()
 
+    def getForecast(self):
+        """Get forecast from OpenWeatherMap online service."""
+
+        count = 3  #  Number of items, reduce because: memory
+        url = "http://api.openweathermap.org/data/2.5/forecast?id={0}&cnt={1}&units=metric&APPID={2}".format(CITYID, count, secrets.OPENWEATHERMAPKEY)
+        r = urequests.get(url)
+        if r.status_code == 200:
+            self.weatherdata = r.json()
+            print(self.weatherdata)
+        else:
+            print("Error getting weather map")
+
+    def getRain(self):
+        """Read weather data to check if it will rain."""
+        res = []
+        for i in self.weatherdata["list"]:
+            res.append(i["rain"]["3h"])
+        return res
+
+    def getTemp(self):
+        """Read weather data to check temp."""
+        res = []
+        for i in self.weatherdata["list"]:
+            res.append(i["main"]["temp"])
+        return res
+
+
 
 class WeatherStation():
     """Main weather station class."""
@@ -92,6 +123,10 @@ class WeatherStation():
         self.display = Display()
         self.net = Network()
         self.dht = dht.DHT22(machine.Pin(PINDHT))
+
+        self.net.getForecast()
+        print(self.net.getRain())
+        print(self.net.getTemp())
 
         # Initial display
         self.updateDisplay()
@@ -111,11 +146,17 @@ class WeatherStation():
         self.display.clear()
         # Time
         tme = self.net.gettime()
-        self.display.showText("{0}:{1}".format(tme[3], tme[4]), 2)
+        self.display.showText("{0}:{1}".format(tme[3], tme[4]), 1)
         # Temp/Hum
         self.display.showText("Innen: {0}:{1}".format(self.dht.temperature(),
-                                                      self.dht.humidity()), 3)
+                                                      self.dht.humidity()), 2)
+        # Forecast
+        temp = self.net.getTemp()
+        self.display.showText("Temp: {0}-{1}".format(min(temp), max(temp)), 3)
 
+        # Rain
+        rain = self.net.getRain()
+        self.display.showText("Rain(max): {0}".format(max(rain)), 4)
 
 # TODO: Get weather forecast
 
