@@ -10,6 +10,11 @@ import dht
 import neopixel
 import esp
 
+# TODO MQTT
+# TODO extension: MQTT currently seems to not support HTTPS on ESP/Python. Fix
+# TODO (optional) Servo for pointer to basic states
+# TODO Harden against changes in OpenWeather format
+
 # Configs
 timeoffset = 1   # Offset in hours to London
 CITYID = "2849802"  # Openweathermap city ID
@@ -113,7 +118,21 @@ class Network():
         res = []
         if self.weatherdata:
             for i in self.weatherdata["list"]:
-                res.append(i["rain"]["3h"])
+                try:
+                    res.append(i["rain"]["3h"])
+                except:
+                    print("No rain data for this time slot")
+        return res
+
+    def getSnow(self):
+        """Read weather data to check if it will be snowing."""
+        res = []
+        if self.weatherdata:
+            for i in self.weatherdata["list"]:
+                try:
+                    res.append(i["snow"]["3h"])
+                except:
+                    print("No snow data for this time slot")
         return res
 
     def getTemp(self):
@@ -188,19 +207,37 @@ class WeatherStation():
                                                       self.dht.humidity()), 1)
         # Forecast
         temp = self.net.getTemp()
-        self.display.showText("Temp: {0}-{1}".format(min(temp), max(temp)), 2)
+        self.display.showText("Temp: {0}:{1}".format(min(temp), max(temp)), 2)
 
         # Rain
         rain = self.net.getRain()
-        self.display.showText("Rain(max): {0}".format(max(rain)), 3)
+        if len(rain):
+            mrain = max(rain)
+        else:
+            mrain = 0
+        self.display.showText("Rain(max): {0}".format(mrain), 3)
+
+        # Snow
+        snow = self.net.getSnow()
+        if len(snow):
+            msnow = max(snow)
+        else:
+            msnow = 0
+        self.display.showText("Snow(max): {0}".format(msnow), 4)
 
         # Comment
-        self.display.showText(comment, 4)
+        self.display.showText(comment, 5)
 
     def logic(self):
         """Use logic to help the user."""
-        rain = max(self.net.getRain())
-        temp = max(self.net.getTemp())
+        try:
+            rain = max(self.net.getRain())
+        except ValueError:
+            rain = 0
+        try:
+            temp = max(self.net.getTemp())
+        except ValueError:
+            temp = 0
 
         hum = self.dht.humidity()
 
