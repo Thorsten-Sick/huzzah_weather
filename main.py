@@ -1,6 +1,7 @@
 import ntptime
 from machine import Pin, I2C
 import machine
+import ubinascii
 import ssd1306
 import network
 import secrets
@@ -9,6 +10,7 @@ import urequests
 import dht
 import neopixel
 import esp
+from umqtt.simple import MQTTClient
 
 # TODO MQTT
 # TODO extension: MQTT currently seems to not support HTTPS on ESP/Python. Fix
@@ -78,13 +80,13 @@ class Network():
         self.sta_if = network.WLAN(network.STA_IF)
         self.sta_if.active(True)
         self.sta_if.connect(secrets.SSID, secrets.WIFIPWD)
-        for i in range(0, 20):
+        for i in range(0, 50):
             if self.sta_if.isconnected():
                 self.settime()
                 break
             print("Waiting for connection " + str(i))
             utime.sleep(1)
-        # TODO: Opportunistic re-tra to connect
+        # TODO: Opportunistic re-try to connect
 
     def settime(self):
         """Set the time using NTP."""
@@ -159,14 +161,17 @@ class WeatherStation():
         self.net = Network()
         self.dht = dht.DHT22(machine.Pin(PINDHT))
 
+        # MQTT
+        self.CLIENT_ID = b"esp8266_"+ubinascii.hexlify(machine.unique_id())
+        self.mclient = MQTTClient(self.CLIENT_ID, secrets.BROKER)
+        self.mclient.connect()
+
         # Neopixel
         self.np = neopixel.NeoPixel(Pin(PINNEOPIXEL), 1)
 
         self.door = machine.Pin(PINDOOR, machine.Pin.IN, machine.Pin.PULL_UP)
 
         self.net.getForecast()
-        #print(self.net.getRain())
-        #print(self.net.getTemp())
 
         # Initial display
         self.updateDisplay()
@@ -199,6 +204,12 @@ class WeatherStation():
         self.measure()
         self.display.clear()
         comment = self.logic()
+
+        # MQTT
+        self.mclient.publish("wz/door", bytes(str(self.doorOpen()), 'utf-8'))
+        self.mclient.publish("wz/temp", bytes(str(self.dht.temperature()), 'utf-8'))
+        self.mclient.publish("wz/hum", bytes(str(self.dht.humidity()), 'utf-8'))
+
         # Time
         tme = self.net.gettime()
         self.display.showText("{0}:{1}".format(tme[3], tme[4]), 0)
@@ -208,6 +219,8 @@ class WeatherStation():
         # Forecast
         temp = self.net.getTemp()
         self.display.showText("Temp: {0}:{1}".format(min(temp), max(temp)), 2)
+        self.mclient.publish("forecast/tempmin", bytes(str(min(temp)), 'utf-8'))
+        self.mclient.publish("forecast/tempmax", bytes(str(max(temp)), 'utf-8'))
 
         # Rain
         rain = self.net.getRain()
@@ -227,6 +240,7 @@ class WeatherStation():
 
         # Comment
         self.display.showText(comment, 5)
+        self.mclient.publish("wz/alert", bytes(comment, 'utf-8'))
 
     def logic(self):
         """Use logic to help the user."""
@@ -262,5 +276,6 @@ class WeatherStation():
 # TODO: Get if door is opened
 
 # TODO: MQTT communication
+
 
 ws = WeatherStation()
