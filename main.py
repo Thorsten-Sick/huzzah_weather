@@ -12,10 +12,11 @@ import neopixel
 import esp
 from umqtt.simple import MQTTClient
 
-# TODO MQTT
 # TODO extension: MQTT currently seems to not support HTTPS on ESP/Python. Fix
-# TODO (optional) Servo for pointer to basic states
-# TODO Harden against changes in OpenWeather format
+# TODO (optional) Servo for pointer to basic states (???)
+# TODO Clean up code and split into different classes: Would be great to be
+# hardware independent for testing
+
 
 # Configs
 timeoffset = 1   # Offset in hours to London
@@ -121,7 +122,7 @@ class Network():
         if self.weatherdata:
             for i in self.weatherdata["list"]:
                 try:
-                    res.append(i["rain"]["3h"])
+                    res.append(float(i["rain"]["3h"]))
                 except:
                     print("No rain data for this time slot")
         return res
@@ -132,7 +133,7 @@ class Network():
         if self.weatherdata:
             for i in self.weatherdata["list"]:
                 try:
-                    res.append(i["snow"]["3h"])
+                    res.append(float(i["snow"]["3h"]))
                 except:
                     print("No snow data for this time slot")
         return res
@@ -142,7 +143,7 @@ class Network():
         res = []
         if self.weatherdata:
             for i in self.weatherdata["list"]:
-                res.append(i["main"]["temp"])
+                res.append(float(i["main"]["temp"]))
         return res
 
 
