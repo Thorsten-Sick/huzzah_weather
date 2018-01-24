@@ -69,6 +69,9 @@ class Display():
         if show:
             self.lcd.show()
 
+    def show(self):
+        self.lcd.show()
+
 
 class Network():
     """Network and network data handling class."""
@@ -147,7 +150,6 @@ class Network():
         return res
 
 
-
 class WeatherStation():
     """Main weather station class."""
 
@@ -159,6 +161,10 @@ class WeatherStation():
         # SLEEP_MODEM is also an option, but prevent it from re-loading data...
 
         self.display = Display()
+        # Neopixel
+        self.np = neopixel.NeoPixel(Pin(PINNEOPIXEL), 1)
+
+        self.self_info()
         self.net = Network()
         self.dht = dht.DHT22(machine.Pin(PINDHT))
 
@@ -166,9 +172,6 @@ class WeatherStation():
         self.CLIENT_ID = b"esp8266_"+ubinascii.hexlify(machine.unique_id())
         self.mclient = MQTTClient(self.CLIENT_ID, secrets.BROKER)
         self.mclient.connect()
-
-        # Neopixel
-        self.np = neopixel.NeoPixel(Pin(PINNEOPIXEL), 1)
 
         self.door = machine.Pin(PINDOOR, machine.Pin.IN, machine.Pin.PULL_UP)
 
@@ -186,6 +189,25 @@ class WeatherStation():
         self.tim = machine.Timer(2)
         self.tim.init(period=60000*3, mode=machine.Timer.PERIODIC,
                       callback=lambda t: self.net.getForecast())
+
+    def self_info(self):
+        """Basically a light show to test that everything is connected"""
+
+        self.display.clear()
+        self.display.showText("Weather forecast", 0)
+        self.display.showText("and bike weather", 1)
+        self.display.showText("by", 2)
+        self.display.showText("Thorsten Sick", 3)
+        self.display.show()
+        self.setNP(GREEN)
+        utime.sleep(1)
+        self.setNP(BLUE)
+        utime.sleep(1)
+        self.setNP(RED)
+        utime.sleep(1)
+        self.setNP(BLACK)
+
+        self.display.clear(True)
 
     def doorOpen(self):
         return self.door.value()
@@ -250,19 +272,21 @@ class WeatherStation():
         except ValueError:
             rain = 0
         try:
-            temp = max(self.net.getTemp())
+            templist = self.net.getTemp()
+            maxtemp = max(templist)
+            mintemp = min(templist)
         except ValueError:
-            temp = 0
+            maxtemp = 0
 
         hum = self.dht.humidity()
 
         rt = 0.001   # rain threshold
         res = ""
 
-        if rain < rt and temp > 10:
+        if rain < rt and mintemp > 10:
             # Good for biking
             self.setNP(GREEN)
-            res = "biking"
+            res = "biking: " + templist[0]
         elif rain > rt and self.doorOpen():
             self.setNP(RED)
             res = "HODOR"
@@ -271,12 +295,13 @@ class WeatherStation():
             res = "Humidity !"
         else:
             self.setNP(BLACK)
-            res = ""
+            res = "aussen: " + str(templist[0])
         return res
 
 # TODO: Get if door is opened
 
 # TODO: MQTT communication
 
+# TODO: Self test on init (light, display)
 
 ws = WeatherStation()
